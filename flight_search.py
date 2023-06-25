@@ -1,12 +1,10 @@
 import requests
 from flight_data import FlightData
-from notification_manager import NotificationManager
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from dotenv import dotenv_values
 
 config = dotenv_values('.env')
-notification_manager = NotificationManager()
 
 API_KEY = config['API_KEY']
 SEARCH_ENDPOINT = config['SEARCH_ENDPOINT']
@@ -62,26 +60,41 @@ class FlightSearch:
         try:
             data = response.json()["data"][0]
         except IndexError:
-            print(f"No flights found for {destination_city_code}.")
-            return None
-        
-        flight_data = FlightData(
-            price=data['price'],
-            origin_city=data['cityFrom'],
-            origin_airport=data['flyFrom'],
-            destination_city=data['cityTo'],
-            destination_airport=data['flyTo'],
-            out_date=data['route'][0]['local_departure'].split('T')[0],
-            return_date=data['route'][1]['local_departure'].split('T')[0]
-        )
-        if flight_data.price < lowest_price:
-            message_string = (
-                f'Low price alert! Only £{flight_data.price} to fly '
-                f'from {flight_data.origin_city}-{flight_data.origin_airport} '
-                f'to {flight_data.destination_city}-{flight_data.destination_airport},'
-                f'from {flight_data.out_date} to {flight_data.return_date}'
-                )
-            notification_manager.send_message(message_string)
+            try:
+                search_params['max_stopovers'] = 1
+                response = requests.get(self.search_endpoint,  headers=headers, params=search_params)
+                data = response.json()["data"][0]
+                stop_over_city = data['route'][0]['cityTo']
+                print(f'Flight has 1 stop, via {stop_over_city}')
 
-        print(f'{flight_data.destination_city}: £{flight_data.price}')
-        return flight_data
+                flight_data = FlightData(
+                price=data['price'],
+                origin_city=data['cityFrom'],
+                origin_airport=data['flyFrom'],
+                destination_city=data['cityTo'],
+                destination_airport=data['flyTo'],
+                out_date=data['route'][0]['local_departure'].split('T')[0],
+                return_date=data['route'][1]['local_departure'].split('T')[0],
+                stop_overs=1,
+                via_city=stop_over_city
+            )
+                print(f'{flight_data.destination_city}: £{flight_data.price}')
+                return flight_data
+            
+            except IndexError:
+                print(f"No flights found for {destination_city_code}.")
+
+            return None
+        else:
+            flight_data = FlightData(
+                price=data['price'],
+                origin_city=data['cityFrom'],
+                origin_airport=data['flyFrom'],
+                destination_city=data['cityTo'],
+                destination_airport=data['flyTo'],
+                out_date=data['route'][0]['local_departure'].split('T')[0],
+                return_date=data['route'][1]['local_departure'].split('T')[0]
+            )
+
+            print(f'{flight_data.destination_city}: £{flight_data.price}')
+            return flight_data
